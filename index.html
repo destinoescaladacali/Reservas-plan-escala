@@ -4,7 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Reservas Plan Escala + y Escala lo-que-sea</title>
-  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Calendario -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -13,19 +18,20 @@
       padding: 20px;
     }
     .container {
-      max-width: 500px;
+      max-width: 520px;
       margin: auto;
       background: white;
       border-radius: 12px;
-      padding: 30px;
+      padding: 24px;
       box-shadow: 0 0 20px rgba(0,0,0,0.1);
     }
     h2 {
       text-align: center;
       color: #333;
+      margin: 0 0 14px 0;
     }
     label {
-      font-weight: 600;
+      font-weight: 700;
       margin-top: 10px;
       display: block;
     }
@@ -34,41 +40,28 @@
       padding: 12px;
       margin-top: 6px;
       margin-bottom: 16px;
-      border-radius: 8px;
+      border-radius: 10px;
       border: 1px solid #ccc;
-      font-size: 15px;
-    }
-    .days {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: center;
-    }
-    .days button {
-      background-color: #eee;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .days button.active-day {
-      background-color: #ff9800;
-      color: white;
+      font-size: 16px; /* evita zoom iOS */
+      box-sizing: border-box;
     }
     button[type="submit"] {
       background: #ffa726;
       color: white;
-      font-weight: bold;
+      font-weight: 800;
       border: none;
+      cursor: pointer;
+      border-radius: 12px;
     }
     #mensaje {
       display: none;
-      text-align: center;
-      font-weight: 600;
+      text-align: left;
+      font-weight: 700;
       padding: 12px;
       border-radius: 10px;
       margin-top: 10px;
+      line-height: 1.35;
+      font-size: 14px;
     }
     #mensaje.ok {
       background: #e6f4ea;
@@ -83,63 +76,68 @@
     #otraReserva {
       display: none;
       margin-top: 10px;
-      padding: 10px;
-      background-color: #ddd;
+      padding: 12px;
+      background-color: #eee;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       cursor: pointer;
+      width: 100%;
+      font-weight: 800;
     }
+    #diaTexto{
+      display:block;
+      margin-top:-10px;
+      margin-bottom:16px;
+      color:#666;
+      font-size: 13px;
+    }
+    .flatpickr-calendar { z-index: 9999 !important; }
   </style>
 </head>
+
 <body>
   <div class="container">
     <h2>Reservas Plan Escala + y Escala lo-que-sea</h2>
 
     <form id="reservaForm">
       <label>Nombre:</label>
-      <input type="text" name="nombre" required />
+      <input type="text" name="nombre" autocomplete="name" required />
 
       <label>Correo electrónico:</label>
-      <input type="email" name="correo" required />
+      <input type="email" name="correo" autocomplete="email" required />
 
       <label>Celular:</label>
-      <input type="text" name="celular" required />
+      <input type="tel" name="celular" inputmode="numeric" autocomplete="tel" required />
 
-      <label>Selecciona un día:</label>
-      <div id="dias" class="days"></div>
+      <label>Selecciona una fecha:</label>
+      <input type="text" id="fecha" name="fecha" placeholder="Elige un día en el calendario" readonly required />
+      <small id="diaTexto"></small>
 
       <label>Horario:</label>
-      <select name="horario" id="horario" required></select>
+      <select name="horario" id="horario" required>
+        <option value="">Selecciona una fecha primero</option>
+      </select>
 
       <button type="submit">Reservar</button>
     </form>
 
     <div id="mensaje"></div>
-    <button id="otraReserva">Hacer otra reserva</button>
+    <button id="otraReserva" type="button">Hacer otra reserva</button>
   </div>
 
-  <script>
+<script>
   const API_URL = 'https://script.google.com/macros/s/AKfycbxKpMN2Rxp38sluli00RMzEd1iQLyJ0bn_lbEdam30dWxugjn9hOC74B1F14LeYompW/exec';
-  let diaSeleccionado = "";
-  let disponibilidad = {};
 
-  // Cargar disponibilidad usando JSONP
+  let disponibilidad = {};
+  let fechaSeleccionada = "";
+
   function mostrarDiasDisponibles(data) {
     if (!data || typeof data !== 'object') {
       mostrarMensaje("Error al cargar disponibilidad.", false);
       return;
     }
-
     disponibilidad = data;
-    const diasDiv = document.getElementById("dias");
-    diasDiv.innerHTML = "";
-    Object.keys(disponibilidad).forEach(dia => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = dia;
-      btn.onclick = () => seleccionarDia(dia, btn);
-      diasDiv.appendChild(btn);
-    });
+    initCalendar();
   }
 
   function cargarDisponibilidad() {
@@ -148,14 +146,76 @@
     document.body.appendChild(script);
   }
 
-  function seleccionarDia(dia, boton) {
-    diaSeleccionado = dia;
-    document.querySelectorAll("#dias button").forEach(b => b.classList.remove("active-day"));
-    boton.classList.add("active-day");
+  function initCalendar() {
+    const diasDisponibles = new Set(Object.keys(disponibilidad));
 
+    const mapDayNameToIndex = {
+      "Domingo": 0,
+      "Lunes": 1,
+      "Martes": 2,
+      "Miércoles": 3,
+      "Miercoles": 3,
+      "Jueves": 4,
+      "Viernes": 5,
+      "Sábado": 6,
+      "Sabado": 6
+    };
+
+    const allowedIndexes = new Set(
+      Array.from(diasDisponibles)
+        .map(d => mapDayNameToIndex[d])
+        .filter(v => v !== undefined)
+    );
+
+    const input = document.getElementById("fecha");
+    if (input._flatpickr) input._flatpickr.destroy();
+
+    const fp = flatpickr("#fecha", {
+      dateFormat: "Y-m-d",
+      minDate: "today",
+      maxDate: new Date().fp_incr(90),
+      disableMobile: true,
+      enable: [
+        function(date){
+          return allowedIndexes.has(date.getDay());
+        }
+      ],
+      onChange: function(selectedDates, dateStr){
+        fechaSeleccionada = dateStr;
+        const dia = obtenerNombreDia(dateStr);
+        document.getElementById("diaTexto").textContent = `Día: ${dia}`;
+        cargarHorariosParaDia(dia);
+        fp.close();
+      }
+    });
+
+    resetUI();
+  }
+
+  function resetUI(){
+    fechaSeleccionada = "";
+    document.getElementById("diaTexto").textContent = "";
+    document.getElementById("horario").innerHTML = `<option value="">Selecciona una fecha primero</option>`;
+  }
+
+  function obtenerNombreDia(yyyy_mm_dd) {
+    const [y,m,d] = yyyy_mm_dd.split("-").map(Number);
+    const dt = new Date(y, m-1, d, 12, 0, 0);
+    const dias = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+    return dias[dt.getDay()];
+  }
+
+  function cargarHorariosParaDia(dia) {
     const select = document.getElementById("horario");
     select.innerHTML = "";
-    disponibilidad[dia].forEach(h => {
+
+    const horas = disponibilidad[dia] || [];
+    if (!horas.length) {
+      select.innerHTML = `<option value="">No hay horarios disponibles</option>`;
+      return;
+    }
+
+    horas.forEach(h => {
       const opt = document.createElement("option");
       opt.value = h;
       opt.textContent = h;
@@ -165,11 +225,13 @@
 
   document.getElementById("reservaForm").addEventListener("submit", async e => {
     e.preventDefault();
-    if (!diaSeleccionado) return mostrarMensaje("Selecciona un día antes de reservar", false);
+    if (!fechaSeleccionada) return mostrarMensaje("Selecciona una fecha en el calendario.", false);
+
+    // blindaje: asegurar valor
+    document.querySelector('input[name="fecha"]').value = fechaSeleccionada;
 
     const form = e.target;
     const data = new FormData(form);
-    data.append("dia", diaSeleccionado);
 
     const body = new URLSearchParams();
     for (const pair of data.entries()) body.append(pair[0], pair[1]);
@@ -186,9 +248,7 @@
 
       if (text.includes("✅")) {
         form.reset();
-        diaSeleccionado = "";
-        document.getElementById("horario").innerHTML = "";
-        document.querySelectorAll("#dias button").forEach(b => b.classList.remove("active-day"));
+        resetUI();
         document.getElementById("otraReserva").style.display = "block";
         cargarDisponibilidad();
       }
@@ -206,15 +266,12 @@
 
   document.getElementById("otraReserva").addEventListener("click", () => {
     document.getElementById("reservaForm").reset();
-    document.getElementById("horario").innerHTML = "";
-    document.querySelectorAll("#dias button").forEach(b => b.classList.remove("active-day"));
+    resetUI();
     document.getElementById("mensaje").style.display = "none";
     document.getElementById("otraReserva").style.display = "none";
-    diaSeleccionado = "";
     cargarDisponibilidad();
   });
 
-  // Inicia carga
   cargarDisponibilidad();
 </script>
 
